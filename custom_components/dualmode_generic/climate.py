@@ -880,15 +880,15 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
     # activate at the edges of the desired range
     def _is_too_cold_activate(self):
         if self._hvac_mode == HVAC_MODE_HEAT_COOL:
-            return self._target_temp_low >= self._cur_temp + self._cold_tolerance
+            return self._target_temp_low > self._cur_temp 
         else:
-            return self._target_temp >= self._cur_temp + self._cold_tolerance
+            return self._target_temp > self._cur_temp 
 
     def _is_too_hot_activate(self):
         if self._hvac_mode == HVAC_MODE_HEAT_COOL:
-            return self._cur_temp >= self._target_temp_high + self._hot_tolerance
+            return self._cur_temp > self._target_temp_high 
         else:
-            return self._cur_temp >= self._target_temp + self._hot_tolerance
+            return self._cur_temp > self._target_temp 
 
     # deactivate at the extremes of the desired range, plus/minus tolerance
     def _is_too_cold_deactivate(self):
