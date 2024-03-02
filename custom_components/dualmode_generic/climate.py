@@ -11,28 +11,12 @@ import logging
 
 import voluptuous as vol
 
-from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
+from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity, HVACMode, HVACAction, ClimateEntityFeature
 from homeassistant.components.climate.const import (
     ATTR_PRESET_MODE,
     ATTR_TARGET_TEMP_LOW,
     ATTR_TARGET_TEMP_HIGH,
-    ATTR_TARGET_TEMP_STEP,
-    CURRENT_HVAC_COOL,
-    CURRENT_HVAC_HEAT,
-    CURRENT_HVAC_FAN,
-    CURRENT_HVAC_DRY,
-    CURRENT_HVAC_IDLE,
-    CURRENT_HVAC_OFF,
-    HVAC_MODE_COOL,
-    HVAC_MODE_HEAT,
-    HVAC_MODE_FAN_ONLY,
-    HVAC_MODE_DRY,
-    HVAC_MODE_OFF,
-    HVAC_MODE_HEAT_COOL,
     PRESET_AWAY,
-    SUPPORT_PRESET_MODE,
-    SUPPORT_TARGET_TEMPERATURE,
-    SUPPORT_TARGET_TEMPERATURE_RANGE,
     PRESET_NONE,
 )
 from homeassistant.const import (
@@ -91,7 +75,7 @@ CONF_AWAY_TEMP_HEATER = "away_temp_heater"
 CONF_AWAY_TEMP_COOLER = "away_temp_cooler"
 CONF_PRECISION = "precision"
 CONF_TEMP_STEP = "target_temp_step"
-SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
+SUPPORT_FLAGS = ClimateEntityFeature.TARGET_TEMPERATURE
 
 CONF_ENABLE_HEAT_COOL = "enable_heat_cool"
 
@@ -132,7 +116,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_KEEP_ALIVE): vol.All(cv.time_period, cv.positive_timedelta),
         vol.Optional(CONF_ENABLE_HEAT_COOL, default=False): vol.Boolean(),
         vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
-            [HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_FAN_ONLY, HVAC_MODE_DRY, HVAC_MODE_OFF, HVAC_MODE_HEAT_COOL]
+            [HVACMode.COOL, HVACMode.HEAT, HVACMode.FAN_ONLY, HVACMode.DRY, HVACMode.OFF, HVACMode.HEAT_COOL]
         ),
         vol.Optional(CONF_AWAY_TEMP): vol.Coerce(float),
         vol.Optional(CONF_AWAY_TEMP_HEATER): vol.Coerce(float),
@@ -294,26 +278,27 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
         self._enable_heat_cool = self.cooler_entity_id and self.heater_entity_id and enable_heat_cool
 
         if self._enable_heat_cool:
-            self._support_flags = SUPPORT_FLAGS | SUPPORT_TARGET_TEMPERATURE_RANGE
+            #self._support_flags = SUPPORT_FLAGS | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+            self._support_flags = ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
         else:
             self._support_flags = SUPPORT_FLAGS
 
         # This list contains all supported HVAC_MODES
-        self._hvac_list = [HVAC_MODE_COOL, HVAC_MODE_HEAT,
-                           HVAC_MODE_DRY, HVAC_MODE_FAN_ONLY,
-                           HVAC_MODE_OFF, HVAC_MODE_HEAT_COOL]
+        self._hvac_list = [HVACMode.COOL, HVACMode.HEAT,
+                           HVACMode.DRY, HVACMode.FAN_ONLY,
+                           HVACMode.OFF, HVACMode.HEAT_COOL]
 
         # Removes unsupported modes based on whats available from the config
         if self.cooler_entity_id is None:
-            self._hvac_list.remove(HVAC_MODE_COOL)
+            self._hvac_list.remove(HVACMode.COOL)
         if self.heater_entity_id is None:
-            self._hvac_list.remove(HVAC_MODE_HEAT)
+            self._hvac_list.remove(HVACMode.HEAT)
         if self.fan_entity_id is None:
-            self._hvac_list.remove(HVAC_MODE_FAN_ONLY)
+            self._hvac_list.remove(HVACMode.FAN_ONLY)
         if self.dryer_entity_id is None:
-            self._hvac_list.remove(HVAC_MODE_DRY)
+            self._hvac_list.remove(HVACMode.DRY)
         if not self._enable_heat_cool:
-            self._hvac_list.remove(HVAC_MODE_HEAT_COOL)
+            self._hvac_list.remove(HVACMode.HEAT_COOL)
 
         self._active = False
         self._cur_temp = None
@@ -327,7 +312,7 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
         self._unit = unit
         self._unique_id = unique_id
         if away_temp or (away_temp_heater and away_temp_cooler):
-            self._support_flags = self._support_flags | SUPPORT_PRESET_MODE
+            self._support_flags = self._support_flags | ClimateEntityFeature.PRESET_MODE
         self._away_temp = away_temp
         self._away_temp_heater = away_temp_heater
         self._away_temp_cooler = away_temp_cooler
@@ -418,20 +403,20 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
             if self._target_temp is None:
                 # If we have a previously saved temperature
                 if old_state.attributes.get(ATTR_TEMPERATURE) is None:
-                    if self._hvac_mode == HVAC_MODE_COOL:
+                    if self._hvac_mode == HVACMode.COOL:
                         self._target_temp = self.max_temp
-                    elif self._hvac_mode == HVAC_MODE_FAN_ONLY:
+                    elif self._hvac_mode == HVACMode.FAN_ONLY:
                         self._target_temp = self.max_temp
-                    elif self._hvac_mode == HVAC_MODE_HEAT:
+                    elif self._hvac_mode == HVACMode.HEAT:
                         self._target_temp = self.min_temp
-                    elif self._hvac_mode == HVAC_MODE_DRY:
+                    elif self._hvac_mode == HVACMode.DRY:
                         self._target_temp = self._min_temp
-                    elif self._hvac_mode == HVAC_MODE_HEAT_COOL:
+                    elif self._hvac_mode == HVACMode.HEAT_COOL:
                         self._target_temp_high = self.max_temp
                         self._target_temp_low = self.min_temp
                     else:
                         self._target_temp = self.min_temp
-                    if self._support_flags & SUPPORT_TARGET_TEMPERATURE_RANGE == SUPPORT_TARGET_TEMPERATURE_RANGE:
+                    if self._support_flags & ClimateEntityFeature.TARGET_TEMPERATURE_RANGE == ClimateEntityFeature.TARGET_TEMPERATURE_RANGE:
                         self._target_temp_high = self.max_temp
                         self._target_temp_low = self.min_temp
                     _LOGGER.warning(
@@ -458,15 +443,15 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
         else:
             # No previous state, try and restore defaults
             if self._target_temp is None:
-                if self._hvac_mode == HVAC_MODE_COOL:
+                if self._hvac_mode == HVACMode.COOL:
                     self._target_temp = self.max_temp
-                elif self._hvac_mode == HVAC_MODE_FAN_ONLY:
+                elif self._hvac_mode == HVACMode.FAN_ONLY:
                     self._target_temp = self.max_temp
-                elif self._hvac_mode == HVAC_MODE_HEAT:
+                elif self._hvac_mode == HVACMode.HEAT:
                     self._target_temp = self.min_temp
-                elif self._hvac_mode == HVAC_MODE_DRY:
+                elif self._hvac_mode == HVACMode.DRY:
                     self._target_temp = self.min_temp
-                elif self._hvac_mode == HVAC_MODE_HEAT_COOL:
+                elif self._hvac_mode == HVACMode.HEAT_COOL:
                     self._target_temp_high = self.max_temp
                     self._target_temp_low = self.min_temp
                 else:
@@ -481,7 +466,55 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
 
         # Set default state to off
         if not self._hvac_mode:
-            self._hvac_mode = HVAC_MODE_OFF
+            self._hvac_mode = HVACMode.OFF
+
+        self._set_support_flags()
+
+
+    def _set_support_flags(self) -> None:
+        """set the correct support flags based on configuration"""
+        if self._hvac_mode == HVACMode.OFF:
+            return
+        
+        self._support_flags = 0
+        
+        if self._hvac_mode == HVACMode.HEAT_COOL:
+            self._support_flags = ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+        elif self._hvac_mode == HVACMode.FAN_ONLY and self.fan_behavior != FAN_MODE_NEUTRAL:
+            self._support_flags = ClimateEntityFeature.TARGET_TEMPERATURE
+        elif self._hvac_mode == HVACMode.DRY and self.dryer_behavior != DRYER_MODE_NEUTRAL:
+            self._support_flags = ClimateEntityFeature.TARGET_TEMPERATURE
+        elif self._hvac_mode in (
+            HVACMode.COOL,
+            HVACMode.HEAT,
+        ):
+            self._support_flags = ClimateEntityFeature.TARGET_TEMPERATURE
+
+        if self._away_temp or (self._away_temp_heater and self._away_temp_cooler):
+            self._support_flags |= ClimateEntityFeature.PRESET_MODE
+
+
+        # if not self._enable_heat_cool or self._hvac_mode in (
+        #     HVACMode.COOL,
+        #     HVACMode.HEAT,
+        #     HVACMode.FAN_ONLY,
+        #     HVACMode.DRY,
+        # ):
+        #     if self._is_range_mode() and self._preset_mode != PRESET_NONE:
+        #         self._preset_mode = PRESET_NONE
+        #         self._target_temp_low = self._saved_target_temp_low
+        #         self._target_temp_high = self._saved_target_temp_high
+        #     self._support_flags = ClimateEntityFeature.TARGET_TEMPERATURE
+        #     if self._away_temp or (self._away_temp_heater and self._away_temp_cooler):
+        #         self._support_flags |= ClimateEntityFeature.PRESET_MODE
+        # else:
+        #     if self._is_target_mode() and self._preset_mode != PRESET_NONE:
+        #         self._preset_mode = PRESET_NONE
+        #         self._target_temp = self._saved_target_temp
+        #     self._support_flags = ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+        #     if self._away_temp or (self._away_temp_heater and self._away_temp_cooler):
+        #         self._support_flags |= ClimateEntityFeature.PRESET_MODE
+        # self._set_default_target_temps()
 
     @property
     def should_poll(self):
@@ -539,26 +572,28 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
 
         Need to be one of CURRENT_HVAC_*.
         """
-        if self._hvac_mode == HVAC_MODE_OFF:
-            return CURRENT_HVAC_OFF
+        if self._hvac_mode == HVACMode.OFF:
+            return HVACAction.OFF
         if not self._is_device_active:
-            return CURRENT_HVAC_IDLE
-        if self._hvac_mode == HVAC_MODE_COOL:
-            return CURRENT_HVAC_COOL
-        if self._hvac_mode == HVAC_MODE_HEAT:
-            return CURRENT_HVAC_HEAT
-        if self._hvac_mode == HVAC_MODE_FAN_ONLY:
-            return CURRENT_HVAC_FAN
-        if self._hvac_mode == HVAC_MODE_DRY:
-            return CURRENT_HVAC_DRY
-        if self._hvac_mode == HVAC_MODE_HEAT_COOL:
-            if self.hass.states.is_state(self.heater_entity_id, STATE_ON):
-                return CURRENT_HVAC_HEAT
-            elif self.hass.states.is_state(self.cooler_entity_id, STATE_ON):
-                return CURRENT_HVAC_COOL
+            return HVACAction.IDLE
+        if self._hvac_mode == HVACMode.COOL:
+            return HVACAction.COOLING
+        if self._hvac_mode == HVACMode.HEAT:
+            return HVACAction.HEATING
+        if self._hvac_mode == HVACMode.FAN_ONLY:
+            return HVACAction.FAN
+        if self._hvac_mode == HVACMode.DRY:
+            return HVACAction.DRYING
+        if self._hvac_mode == HVACMode.HEAT_COOL:
+            #if self.hass.states.is_state(self.heater_entity_id, STATE_ON):
+            if self._is_too_cold_activate():
+                return HVACAction.HEATING
+            #elif self.hass.states.is_state(self.cooler_entity_id, STATE_ON):
+            elif self._is_too_hot_activate():
+                return HVACAction.COOLING
             else:
-                return CURRENT_HVAC_IDLE
-        return CURRENT_HVAC_IDLE
+                return HVACAction.IDLE
+        return HVACAction.IDLE
 
     @property
     def target_temperature(self):
@@ -589,11 +624,33 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
     def preset_modes(self):
         """Return a list of available preset modes or PRESET_NONE if _away_temp or (_away_temp_heater and _away_temp_cooler) are undefined."""
         return [PRESET_NONE, PRESET_AWAY] if (self._away_temp or (self._away_temp_heater and self._away_temp_cooler)) else PRESET_NONE
+    
+    # @property
+    # def extra_state_attributes(self):
+    #     """Return entity specific state attributes to be saved."""
+    #     attributes = {}
+    #     if self._target_temp_low is not None:
+    #         if self._preset_mode != PRESET_NONE and self._is_range_mode():
+    #             attributes[ATTR_PREV_TARGET_LOW] = self._saved_target_temp_low
+    #         else:
+    #             attributes[ATTR_PREV_TARGET_LOW] = self._target_temp_low
+    #     if self._target_temp_high is not None:
+    #         if self._preset_mode != PRESET_NONE and self._is_range_mode():
+    #             attributes[ATTR_PREV_TARGET_HIGH] = self._saved_target_temp_high
+    #         else:
+    #             attributes[ATTR_PREV_TARGET_HIGH] = self._target_temp_high
+    #     if self._target_temp is not None:
+    #         if self._preset_mode != PRESET_NONE and self._is_target_mode():
+    #             attributes[ATTR_PREV_TARGET] = self._saved_target_temp
+    #         else:
+    #             attributes[ATTR_PREV_TARGET] = self._target_temp
 
+    #     return attributes
+        
     async def async_set_hvac_mode(self, hvac_mode):
         """Set hvac mode."""
-        if hvac_mode == HVAC_MODE_HEAT:
-            self._hvac_mode = HVAC_MODE_HEAT
+        if hvac_mode == HVACMode.HEAT:
+            self._hvac_mode = HVACMode.HEAT
             if self._is_device_active:
                 if REVERSE_CYCLE_IS_COOLER not in self.reverse_cycle:
                     await self._async_cooler_turn_off()
@@ -601,9 +658,10 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
                     await self._async_fan_turn_off()
                 if REVERSE_CYCLE_IS_DRYER not in self.reverse_cycle:
                     await self._async_dryer_turn_off()
+            self._set_support_flags()
             await self._async_control_heating(force=True)
-        elif hvac_mode == HVAC_MODE_COOL:
-            self._hvac_mode = HVAC_MODE_COOL
+        elif hvac_mode == HVACMode.COOL:
+            self._hvac_mode = HVACMode.COOL
             if self._is_device_active:
                 if REVERSE_CYCLE_IS_HEATER not in self.reverse_cycle:
                     await self._async_heater_turn_off()
@@ -611,9 +669,10 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
                     await self._async_fan_turn_off()
                 if REVERSE_CYCLE_IS_DRYER not in self.reverse_cycle:
                     await self._async_dryer_turn_off()
+            self._set_support_flags()
             await self._async_control_heating(force=True)
-        elif hvac_mode == HVAC_MODE_FAN_ONLY:
-            self._hvac_mode = HVAC_MODE_FAN_ONLY
+        elif hvac_mode == HVACMode.FAN_ONLY:
+            self._hvac_mode = HVACMode.FAN_ONLY
             if self._is_device_active:
                 if REVERSE_CYCLE_IS_COOLER not in self.reverse_cycle:
                     await self._async_cooler_turn_off()
@@ -621,9 +680,10 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
                     await self._async_heater_turn_off()
                 if REVERSE_CYCLE_IS_DRYER not in self.reverse_cycle:
                     await self._async_dryer_turn_off()
+            self._set_support_flags()
             await self._async_control_heating(force=True)
-        elif hvac_mode == HVAC_MODE_DRY:
-            self._hvac_mode = HVAC_MODE_DRY
+        elif hvac_mode == HVACMode.DRY:
+            self._hvac_mode = HVACMode.DRY
             if self._is_device_active:
                 if REVERSE_CYCLE_IS_COOLER not in self.reverse_cycle:
                     await self._async_cooler_turn_off()
@@ -631,17 +691,19 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
                     await self._async_heater_turn_off()
                 if REVERSE_CYCLE_IS_FAN not in self.reverse_cycle:
                     await self._async_fan_turn_off()
+            self._set_support_flags()
             await self._async_control_heating(force=True)
-        elif hvac_mode == HVAC_MODE_HEAT_COOL:
-            self._hvac_mode = HVAC_MODE_HEAT_COOL
+        elif hvac_mode == HVACMode.HEAT_COOL:
+            self._hvac_mode = HVACMode.HEAT_COOL
             if self._is_device_active:
                 if REVERSE_CYCLE_IS_FAN not in self.reverse_cycle:
                     await self._async_fan_turn_off()
                 if REVERSE_CYCLE_IS_DRYER not in self.reverse_cycle:
                     await self._async_dryer_turn_off()
+            self._set_support_flags()
             await self._async_control_heating(force=True)
-        elif hvac_mode == HVAC_MODE_OFF:
-            self._hvac_mode = HVAC_MODE_OFF
+        elif hvac_mode == HVACMode.OFF:
+            self._hvac_mode = HVACMode.OFF
             if self._is_device_active:
                 await self._async_heater_turn_off()
                 await self._async_cooler_turn_off()
@@ -729,19 +791,19 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
                     self._target_temp,
                 )
 
-            if not self._active or self._hvac_mode == HVAC_MODE_OFF:
+            if not self._active or self._hvac_mode == HVACMode.OFF:
                 return
 
             # This check sets the active entity outside of the checks below to make it available for keep-alive logic
-            if self._hvac_mode == HVAC_MODE_COOL:
+            if self._hvac_mode == HVACMode.COOL:
                 active_entity = self.cooler_entity_id
-            if self._hvac_mode == HVAC_MODE_HEAT:
+            if self._hvac_mode == HVACMode.HEAT:
                 active_entity = self.heater_entity_id
-            if self._hvac_mode == HVAC_MODE_FAN_ONLY:
+            if self._hvac_mode == HVACMode.FAN_ONLY:
                 active_entity = self.fan_entity_id
-            if self._hvac_mode == HVAC_MODE_DRY:
+            if self._hvac_mode == HVACMode.DRY:
                 active_entity = self.dryer_entity_id
-            if self._hvac_mode == HVAC_MODE_HEAT_COOL:
+            if self._hvac_mode == HVACMode.HEAT_COOL:
                 if self.hass.states.is_state(self.cooler_entity_id, STATE_ON):
                     active_entity = self.cooler_entity_id
                 else:
@@ -757,7 +819,7 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
                     if self._is_device_active:
                         current_state = STATE_ON
                     else:
-                        current_state = HVAC_MODE_OFF
+                        current_state = HVACMode.OFF
                     long_enough = condition.state(
                         self.hass,
                         active_entity,
@@ -771,25 +833,25 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
                 too_cold = self._is_too_cold_deactivate()
                 too_hot = self._is_too_hot_deactivate()
                 is_comfortable = self._is_within_range_deactivate()
-                if too_cold and (self._hvac_mode == HVAC_MODE_COOL):
+                if too_cold and (self._hvac_mode == HVACMode.COOL):
                     _LOGGER.info("Too cold! Turning off cooler %s", self.cooler_entity_id)
                     await self._async_cooler_turn_off()
-                elif too_hot and (self._hvac_mode == HVAC_MODE_HEAT):
+                elif too_hot and (self._hvac_mode == HVACMode.HEAT):
                     _LOGGER.info("Too hot! Turning off heater %s", self.heater_entity_id)
                     await self._async_heater_turn_off()
-                elif is_comfortable and (self._hvac_mode == HVAC_MODE_HEAT_COOL):
+                elif is_comfortable and (self._hvac_mode == HVACMode.HEAT_COOL):
                     _LOGGER.info("Just right! Turning off heater %s", self.heater_entity_id)
                     await self._async_heater_turn_off()
                     _LOGGER.info("Just right! Turning off cooler %s", self.cooler_entity_id)
                     await self._async_cooler_turn_off()
-                elif self._hvac_mode == HVAC_MODE_FAN_ONLY:
+                elif self._hvac_mode == HVACMode.FAN_ONLY:
                     if too_cold and self.fan_behavior == FAN_MODE_COOL:
                         _LOGGER.info("Turning off fan %s", self.fan_entity_id)
                         await self._async_fan_turn_off()
                     elif too_hot and self.fan_behavior == FAN_MODE_HEAT:
                         _LOGGER.info("Turning off fan %s", self.fan_entity_id)
                         await self._async_fan_turn_off()
-                elif self._hvac_mode == HVAC_MODE_DRY:
+                elif self._hvac_mode == HVACMode.DRY:
                     if too_cold and self.dryer_behavior == DRYER_MODE_COOL:
                         _LOGGER.info("Turning off dehumidifier %s", self.dryer_entity_id)
                         await self._async_dryer_turn_off()
@@ -801,36 +863,36 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
                     _LOGGER.info(
                         "Keep-alive - Turning on %s", active_entity
                     )
-                    if self._hvac_mode == HVAC_MODE_COOL:
+                    if self._hvac_mode == HVACMode.COOL:
                         await self._async_cooler_turn_on()
-                    elif self._hvac_mode == HVAC_MODE_HEAT:
+                    elif self._hvac_mode == HVACMode.HEAT:
                         await self._async_heater_turn_on()
-                    elif self._hvac_mode == HVAC_MODE_FAN_ONLY:
+                    elif self._hvac_mode == HVACMode.FAN_ONLY:
                         await self._async_fan_turn_on()
-                    elif self._hvac_mode == HVAC_MODE_DRY:
+                    elif self._hvac_mode == HVACMode.DRY:
                         await self._async_dryer_turn_on()
-                    elif self._hvac_mode == HVAC_MODE_HEAT_COOL:
-                        if self.hass.states.is_state(self.heater_entity_id, STATE_ON):
+                    elif self._hvac_mode == HVACMode.HEAT_COOL:
+                        if self._is_too_cold_activate():
                             await self._async_heater_turn_on()
-                        elif self.hass.states.is_state(self.cooler_entity_id, STATE_ON):
+                        elif self._is_too_hot_activate():
                             await self._async_cooler_turn_on()
             else:  # when to turn on
                 too_cold = self._is_too_cold_activate()
                 too_hot = self._is_too_hot_activate()
-                if too_hot and (self._hvac_mode == HVAC_MODE_COOL or self._hvac_mode == HVAC_MODE_HEAT_COOL):
+                if too_hot and (self._hvac_mode == HVACMode.COOL or self._hvac_mode == HVACMode.HEAT_COOL):
                     _LOGGER.info("Turning on cooler %s", self.cooler_entity_id)
                     await self._async_cooler_turn_on()
-                elif too_cold and (self._hvac_mode == HVAC_MODE_HEAT or self._hvac_mode == HVAC_MODE_HEAT_COOL):
+                elif too_cold and (self._hvac_mode == HVACMode.HEAT or self._hvac_mode == HVACMode.HEAT_COOL):
                     _LOGGER.info("Turning on heater %s", self.heater_entity_id)
                     await self._async_heater_turn_on()
-                elif self._hvac_mode == HVAC_MODE_FAN_ONLY:
+                elif self._hvac_mode == HVACMode.FAN_ONLY:
                     if too_hot and self.fan_behavior == FAN_MODE_COOL:
                         _LOGGER.info("Turning on fan %s", self.fan_entity_id)
                         await self._async_fan_turn_on()
                     elif too_cold and self.fan_behavior == FAN_MODE_HEAT:
                         _LOGGER.info("Turning on fan %s", self.fan_entity_id)
                         await self._async_fan_turn_on()
-                elif self._hvac_mode == HVAC_MODE_DRY:
+                elif self._hvac_mode == HVACMode.DRY:
                     if too_hot and self.dryer_behavior == DRYER_MODE_COOL:
                         _LOGGER.info("Turning on dehumidifier %s", self.dryer_entity_id)
                         await self._async_dryer_turn_on()
@@ -842,23 +904,23 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
                     _LOGGER.info(
                         "Keep-alive - Turning off %s", active_entity
                     )
-                    if self._hvac_mode == HVAC_MODE_COOL:
+                    if self._hvac_mode == HVACMode.COOL:
                         await self._async_cooler_turn_off()
-                    elif self._hvac_mode == HVAC_MODE_HEAT:
+                    elif self._hvac_mode == HVACMode.HEAT:
                         await self._async_heater_turn_off()
-                    elif self._hvac_mode == HVAC_MODE_FAN_ONLY:
+                    elif self._hvac_mode == HVACMode.FAN_ONLY:
                         await self._async_fan_turn_off()
-                    elif self._hvac_mode == HVAC_MODE_DRY:
+                    elif self._hvac_mode == HVACMode.DRY:
                         await self._async_dryer_turn_off()
-                    elif self._hvac_mode == HVAC_MODE_HEAT_COOL:
+                    elif self._hvac_mode == HVACMode.HEAT_COOL:
                         if self.hass.states.is_state(self.heater_entity_id, STATE_ON):
                             await self._async_heater_turn_off()
                         elif self.hass.states.is_state(self.cooler_entity_id, STATE_ON):
                             await self._async_cooler_turn_off()
 
-            if self.fan_behavior == FAN_MODE_NEUTRAL and self._hvac_mode == HVAC_MODE_FAN_ONLY:
+            if self.fan_behavior == FAN_MODE_NEUTRAL and self._hvac_mode == HVACMode.FAN_ONLY:
                 await self._async_fan_turn_on()
-            if self.dryer_behavior == DRYER_MODE_NEUTRAL and self._hvac_mode == HVAC_MODE_DRY:
+            if self.dryer_behavior == DRYER_MODE_NEUTRAL and self._hvac_mode == HVACMode.DRY:
                 await self._async_dryer_turn_on()
 
     @property
@@ -879,20 +941,20 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
 
     # activate at the edges of the desired range
     def _is_too_cold_activate(self):
-        if self._hvac_mode == HVAC_MODE_HEAT_COOL:
+        if self._hvac_mode == HVACMode.HEAT_COOL:
             return self._target_temp_low > self._cur_temp 
         else:
             return self._target_temp > self._cur_temp 
 
     def _is_too_hot_activate(self):
-        if self._hvac_mode == HVAC_MODE_HEAT_COOL:
+        if self._hvac_mode == HVACMode.HEAT_COOL:
             return self._cur_temp > self._target_temp_high 
         else:
             return self._cur_temp > self._target_temp 
 
     # deactivate at the extremes of the desired range, plus/minus tolerance
     def _is_too_cold_deactivate(self):
-        if self._hvac_mode == HVAC_MODE_HEAT_COOL:
+        if self._hvac_mode == HVACMode.HEAT_COOL:
             # Use the midpoint in the set range as our target temp when in range mode
             # return ((self._target_temp_low + self._target_temp_high)/2) >= self._cur_temp + self._cold_tolerance
             too_cold = self._target_temp_high >= self._cur_temp + self._cold_tolerance
@@ -905,7 +967,7 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
             return self._target_temp >= self._cur_temp + self._cold_tolerance
 
     def _is_too_hot_deactivate(self):
-        if self._hvac_mode == HVAC_MODE_HEAT_COOL:
+        if self._hvac_mode == HVACMode.HEAT_COOL:
             too_hot = self._cur_temp >= self._target_temp_low + self._hot_tolerance
             _LOGGER.info(
                 "_is_too_hot_deactivate: %s| %s,%s,%s",
@@ -971,12 +1033,12 @@ class DualModeGenericThermostat(ClimateEntity, RestoreEntity):
         if preset_mode == PRESET_AWAY and not self._is_away:
             self._is_away = True
             self._saved_target_temp = self._target_temp
-            if self._hvac_mode == HVAC_MODE_COOL:
+            if self._hvac_mode == HVACMode.COOL:
                 if self._away_temp_cooler:
                     self._target_temp = self._away_temp_cooler
                 else:
                     self._target_temp = self._away_temp
-            elif self._hvac_mode == HVAC_MODE_HEAT:
+            elif self._hvac_mode == HVACMode.HEAT:
                 if self._away_temp_heater:
                     self._target_temp = self._away_temp_heater
                 else:
